@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#070b24">
+  <title>Сокобан</title>
+
+  <!-- Піксельний шрифт (є кирилиця). Якщо шрифт не завантажився, підставиться моноширинний -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="./style.css">
+  <!-- Бібліотека Telegram Mini Apps -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div id="app">
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <!-- ===== Головне меню ===== -->
+    <section id="screen-menu" class="screen active">
+      <div class="menu-inner">
+        <div class="title-plate brick"><h1>СОКОБАН</h1></div>
+        <p class="subtitle">РЕТРО-СКЛАД</p>
+
+        <div class="menu-sprites" aria-hidden="true">
+          <canvas data-sprite="wall" data-size="48"></canvas>
+          <canvas data-sprite="player" data-size="64"></canvas>
+          <canvas data-sprite="box" data-size="48"></canvas>
+          <canvas data-sprite="goal" data-size="48"></canvas>
+          <canvas data-sprite="wall" data-size="48"></canvas>
+        </div>
+
+        <div class="menu-buttons">
+          <button class="btn btn-green" id="btn-new">🎮 Нова гра</button>
+          <button class="btn btn-pink" id="btn-howto">📜 Як грати</button>
+          <button class="btn btn-yellow" id="btn-scores">🏆 Зал слави</button>
+        </div>
+        <p class="menu-error hidden" id="menu-error"></p>
+      </div>
+    </section>
+
+    <!-- ===== Як грати ===== -->
+    <section id="screen-howto" class="screen">
+      <div class="page">
+        <h2 class="page-title">📜 Як грати</h2>
+        <div class="page-body">
+          <p class="lead">Ти — вантажник на складі. Розстав усі ящики по цілях, щоб пройти рівень.</p>
+
+          <ul class="legend">
+            <li><canvas data-sprite="player" data-size="40"></canvas><span><b>Ти.</b> Рухайся по складу.</span></li>
+            <li><canvas data-sprite="box" data-size="40"></canvas><span><b>Ящик.</b> Його можна лише штовхати.</span></li>
+            <li><canvas data-sprite="goal" data-size="40"></canvas><span><b>Ціль.</b> Сюди треба поставити ящик.</span></li>
+            <li><canvas data-sprite="boxDone" data-size="40"></canvas><span><b>Ящик на місці.</b> Світиться жовтою рамкою.</span></li>
+            <li><canvas data-sprite="wall" data-size="40"></canvas><span><b>Стіна.</b> Крізь неї не пройти.</span></li>
+          </ul>
+
+          <h3>Правила</h3>
+          <ol class="rules">
+            <li><b>Тільки штовхати.</b> Ящик їде вперед, туди, куди ти йдеш. Тягнути його на себе не можна.</li>
+            <li><b>Один ящик за раз.</b> Два ящики поспіль, або ящик біля стіни — не зрушиться.</li>
+            <li><b>Не заганяй у кут.</b> Ящик у куті застрягає назавжди. Якщо щось пішло не так — натисни «🔄 Перезапустити рівень».</li>
+          </ol>
+
+          <h3>Керування</h3>
+          <p>Проводь пальцем по полю, тисни стрілки на екрані або клавіші ←↑↓→ / WASD.</p>
+          <p><b>↩ Крок назад</b> скасовує останній хід (клавіша Z або Backspace) — можна натискати кілька разів поспіль. Скасований хід не рахується у твоїх кроках. Клавіша R — перезапуск рівня.</p>
+
+          <h3>Очки</h3>
+          <p id="rule-scoring">За кожен рівень — до 1000 очок. Чим менше зайвих кроків, тим більше очок.</p>
+          <p>У 🏆 Залі слави потрапляють ті, хто пройшов <b>усі рівні</b>. Якщо вийти в меню (🚪), прогрес і результат не зберігаються.</p>
+        </div>
+        <button class="btn btn-pink back-btn" data-action="back">⬅ Назад</button>
+      </div>
+    </section>
+
+    <!-- ===== Гра ===== -->
+    <section id="screen-game" class="screen">
+      <header class="hud">
+        <div class="hud-item"><span class="hud-label">SCORE</span><span class="hud-value" id="hud-score">000000</span></div>
+        <div class="hud-item"><span class="hud-label">LEVEL</span><span class="hud-value" id="hud-level">01/01</span></div>
+        <div class="hud-item"><span class="hud-label">MOVES</span><span class="hud-value" id="hud-moves">0</span></div>
+      </header>
+      <div class="level-name" id="level-name"></div>
+
+      <div class="board-wrap" id="board-wrap">
+        <canvas id="board"></canvas>
+      </div>
+
+      <div class="dpad" aria-label="Керування">
+        <button class="dbtn undo" id="btn-undo" aria-label="Крок назад" title="Крок назад (Z)">↩<span>КРОК НАЗАД</span></button>
+        <button class="dbtn up" data-dir="U" aria-label="Вгору">▲</button>
+        <button class="dbtn left" data-dir="L" aria-label="Вліво">◀</button>
+        <button class="dbtn down" data-dir="D" aria-label="Вниз">▼</button>
+        <button class="dbtn right" data-dir="R" aria-label="Вправо">▶</button>
+      </div>
+
+      <div class="game-actions">
+        <button class="btn btn-yellow small" id="btn-restart">🔄 Перезапустити рівень</button>
+        <button class="btn btn-red small" id="btn-exit">🚪 Вихід до меню</button>
+      </div>
+
+      <div class="overlay hidden" id="overlay">
+        <div class="overlay-card">
+          <h2 id="overlay-title"></h2>
+          <div id="overlay-lines"></div>
+          <div id="overlay-buttons" class="overlay-buttons"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Зал слави ===== -->
+    <section id="screen-scores" class="screen">
+      <div class="page">
+        <h2 class="page-title">🏆 Зал слави</h2>
+        <div class="page-body">
+          <ol class="board-list" id="score-list"></ol>
+          <p class="score-status" id="score-status"></p>
+        </div>
+        <button class="btn btn-pink back-btn" data-action="back">⬅ Назад</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="./sprites.js"></script>
+  <script src="./game.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
