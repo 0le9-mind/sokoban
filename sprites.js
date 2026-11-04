@@ -3,7 +3,7 @@
  * Кожен спрайт малюється один раз на маленькому canvas, а потім
  * масштабується без згладжування — так зберігається «піксельний» вигляд.
  *
- * Палітра (рожеві стіни, зелені ящики, темно-синя підлога) легко змінюється нижче.
+ * Палітра (рожеві стіни, світло-коричневі ящики, лимонно-жовті цілі, темно-синя підлога) легко змінюється нижче.
  */
 (function (global) {
   'use strict';
@@ -20,18 +20,19 @@
     brickLight: '#ff8fc2',
     brickDark: '#c13878',
     mortar: '#6b1a45',
-    // Яскраво-зелені ящики
-    boxEdge: '#06240f',
-    boxBody: '#2cff6b',
-    boxPanel: '#12c24a',
-    boxDark: '#0b6b2d',
-    boxLight: '#a6ffc0',
-    // Ящик на цілі — лаймовий із жовтою рамкою
-    boxDoneBody: '#c6ff3d',
-    boxDonePanel: '#8fd400',
-    boxDoneDark: '#4a7a00',
-    boxDoneLight: '#f3ffb0',
-    goal: '#ffd23f',
+    // Світло-коричневі дерев'яні ящики
+    boxEdge: '#2e1a0a',
+    boxBody: '#d9a566',
+    boxPanel: '#b98348',
+    boxDark: '#6e4620',
+    boxLight: '#f0cf9a',
+    // Ящик на цілі — лимонно-жовтий
+    boxDoneBody: '#fff44f',
+    boxDonePanel: '#e8d900',
+    boxDoneDark: '#8a7c00',
+    boxDoneLight: '#fffcb8',
+    // Ціль — лимонно-жовта
+    goal: '#fff44f',
     // Гравець
     hat: '#35e0ff',
     skin: '#ffd6a5',
@@ -80,6 +81,8 @@
         rect(ctx, COLORS.floor, 7 - i, 5 + i, 2 + 2 * i, 1);
         rect(ctx, COLORS.floor, 7 - i, 10 - i, 2 + 2 * i, 1);
       }
+      // лимонна «світлинка» в центрі, щоб ціль було добре видно
+      rect(ctx, COLORS.goal, 7, 7, 2, 2);
     },
 
     box(ctx, done) {

@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./style.css?v=3">
   <!-- Бібліотека Telegram Mini Apps -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -34,6 +34,8 @@
         </div>
 
         <div class="menu-buttons">
+          <button class="btn btn-green hidden" id="btn-continue">▶ Продовжити</button>
+          <p class="continue-info hidden" id="continue-info"></p>
           <button class="btn btn-green" id="btn-new">🎮 Нова гра</button>
           <button class="btn btn-pink" id="btn-howto">📜 Як грати</button>
           <button class="btn btn-yellow" id="btn-scores">🏆 Зал слави</button>
@@ -51,9 +53,9 @@
 
           <ul class="legend">
             <li><canvas data-sprite="player" data-size="40"></canvas><span><b>Ти.</b> Рухайся по складу.</span></li>
-            <li><canvas data-sprite="box" data-size="40"></canvas><span><b>Ящик.</b> Його можна лише штовхати.</span></li>
-            <li><canvas data-sprite="goal" data-size="40"></canvas><span><b>Ціль.</b> Сюди треба поставити ящик.</span></li>
-            <li><canvas data-sprite="boxDone" data-size="40"></canvas><span><b>Ящик на місці.</b> Світиться жовтою рамкою.</span></li>
+            <li><canvas data-sprite="box" data-size="40"></canvas><span><b>Ящик.</b> Світло-коричневий. Його можна лише штовхати.</span></li>
+            <li><canvas data-sprite="goal" data-size="40"></canvas><span><b>Ціль.</b> Лимонно-жовтий ромб. Сюди треба поставити ящик.</span></li>
+            <li><canvas data-sprite="boxDone" data-size="40"></canvas><span><b>Ящик на місці.</b> Коли ящик стоїть на цілі, він стає жовтим.</span></li>
             <li><canvas data-sprite="wall" data-size="40"></canvas><span><b>Стіна.</b> Крізь неї не пройти.</span></li>
           </ul>
 
@@ -124,8 +126,8 @@
     </section>
   </div>
 
-  <script src="./sprites.js"></script>
-  <script src="./game.js"></script>
-  <script src="./app.js"></script>
+  <script src="./sprites.js?v=3"></script>
+  <script src="./game.js?v=3"></script>
+  <script src="./app.js?v=3"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 /* ==========================================================
    Ретро-стиль «Сокобана»
-   Глибокий темно-синій фон, рожева цегла, зелені ящики,
+   Глибокий темно-синій фон, рожева цегла, коричневі ящики, лимонні цілі,
    піксельний шрифт. Усі кольори — у змінних нижче.
    ========================================================== */
 :root {
@@ -61,7 +61,6 @@ html, body {
   mix-blend-mode: multiply;
 }
 
-.hidden { display: none !important; }
 
 /* ---------- Екрани ---------- */
 .screen {
@@ -89,6 +88,7 @@ html, body {
 .btn-green  { background: var(--green);  color: #052e12; text-shadow: none; box-shadow: 0 6px 0 var(--green-dark), 0 6px 0 4px #000; }
 .btn-pink   { background: var(--pink);   box-shadow: 0 6px 0 var(--mortar),  0 6px 0 4px #000; }
 .btn-yellow { background: var(--yellow); color: #3a2a00; text-shadow: none; box-shadow: 0 6px 0 var(--yellow-dark), 0 6px 0 4px #000; }
+.btn-blue   { background: #35e0ff; color: #04243a; text-shadow: none; box-shadow: 0 6px 0 #0b7a99, 0 6px 0 4px #000; }
 .btn-red    { background: var(--red);    box-shadow: 0 6px 0 var(--red-dark),  0 6px 0 4px #000; }
 .btn.small  { font-size: 9px; padding: 11px 6px; }
 
@@ -323,3 +323,6 @@ html, body {
   .btn { font-size: 11px; }
   .btn.small { font-size: 8px; }
 }
+
+.continue-info { margin: -6px 0 2px; font-family: var(--pixel); font-size: 9px; line-height: 1.6; color: var(--yellow); text-align: center; }
+.hidden { display: none !important; }

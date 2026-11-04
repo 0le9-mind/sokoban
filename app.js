@@ -60,14 +60,108 @@
   }
 
   function goToMenu() {
-    // Вихід у меню: поточний прогрес та результат відкидаються
+    // Вихід у меню: прогрес уже збережено (як у старих іграх на приставці)
     hideOverlay();
     run.game = null;
     run.solutions = [];
     run.totalScore = 0;
     run.levelIndex = 0;
     run.locked = false;
+    refreshMenu();
     showScreen('menu');
+  }
+
+  // ---------- Збереження гри ----------
+  // Прогрес лежить у пам'яті телефона (localStorage), окремо для цієї гри.
+  const SAVE_KEY = 'sokoban_save_v2';
+
+  function configSignature() {
+    // Якщо рівні в грі змінилися, старе збереження не підходить і ігнорується
+    return config.levels.length + ':' + config.levels.reduce((a, l) => a + l.par, 0);
+  }
+
+  // levelIndex/current можна задати явно (наприклад, одразу після проходження рівня)
+  function writeSave(levelIndex, current) {
+    if (!config || !run.game) return;
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        sig: configSignature(),
+        levelIndex: levelIndex === undefined ? run.levelIndex : levelIndex,
+        totalScore: run.totalScore,
+        solutions: run.solutions,
+        current: current === undefined ? run.game.moves : current,
+        finished: Boolean(run.finished),
+        submitted: Boolean(run.submitted),
+      }));
+    } catch (e) { /* збереження недоступне — гра працює й без нього */ }
+  }
+
+  function readSave() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw || !config) return null;
+      const d = JSON.parse(raw);
+      if (d.sig !== configSignature() || d.submitted) return null;
+      if (!Array.isArray(d.solutions) || !Number.isInteger(d.levelIndex)) return null;
+      if (d.levelIndex < 0 || d.levelIndex >= config.levels.length) return null;
+      if (d.solutions.length !== d.levelIndex + (d.finished ? 1 : 0)) return null;
+      return d;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function clearSave() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* нічого */ }
+  }
+
+  /** Показує або ховає «Продовжити» залежно від наявності збереження. */
+  function refreshMenu() {
+    const save = config ? readSave() : null;
+    const btn = $('btn-continue');
+    const info = $('continue-info');
+    btn.classList.toggle('hidden', !save);
+    info.classList.toggle('hidden', !save);
+    if (save) {
+      const level = save.finished ? config.levels.length : save.levelIndex + 1;
+      info.textContent = `Рівень ${level} із ${config.levels.length} · SCORE ${save.totalScore}`;
+    }
+    const nb = $('btn-new');
+    nb.classList.toggle('btn-green', !save);
+    nb.classList.toggle('btn-blue', Boolean(save));
+  }
+
+  function confirmDialog(message, onYes) {
+    if (tg && tg.showConfirm) {
+      try { tg.showConfirm(message, (ok) => { if (ok) onYes(); }); return; } catch (e) { /* далі звичайний confirm */ }
+    }
+    if (window.confirm(message)) onYes();
+  }
+
+  function continueGame() {
+    const save = readSave();
+    if (!save) { refreshMenu(); return; }
+    run.totalScore = save.totalScore;
+    run.solutions = save.solutions.slice();
+    run.finished = false;
+    run.submitted = false;
+    showScreen('game');
+    if (save.finished) {
+      loadLevel(save.levelIndex);
+      // повертаємо розв'язаний останній рівень і пропонуємо надіслати результат
+      for (const ch of save.current) run.game.move(ch);
+      render();
+      run.finished = true;
+      finishGame();
+      return;
+    }
+    loadLevel(save.levelIndex);
+    // відновлюємо ходи на поточному рівні
+    for (const ch of save.current) {
+      if (!run.game.move(ch).moved) { run.game.reset(); break; }
+    }
+    updateHud();
+    render();
   }
 
   // ---------- HUD ----------
@@ -157,10 +251,21 @@
   // ---------- Перебіг гри ----------
   function startNewGame() {
     if (!config) return;
+    if (readSave()) {
+      confirmDialog('Почати нову гру? Збережений прогрес буде стерто.', beginNewGame);
+    } else {
+      beginNewGame();
+    }
+  }
+
+  function beginNewGame() {
     run.levelIndex = 0;
     run.totalScore = 0;
     run.solutions = [];
+    run.finished = false;
+    run.submitted = false;
     loadLevel(0);
+    writeSave(); // нова гра одразу замінює старе збереження
     showScreen('game');
   }
 
@@ -178,6 +283,7 @@
     run.game.reset(); // ходи рівня обнуляються — рахунок піде з нуля
     updateHud();
     render();
+    writeSave();
   }
 
   function undoMove() {
@@ -187,6 +293,7 @@
     $('hud-moves').textContent = String(run.game.moves.length);
     updateUndoButton();
     render();
+    writeSave();
   }
 
   function tryMove(dir) {
@@ -198,6 +305,7 @@
     updateUndoButton();
     render();
     if (run.game.isSolved()) onLevelSolved();
+    else writeSave();
   }
 
   function onLevelSolved() {
@@ -210,6 +318,13 @@
     haptic('success');
 
     const isLast = run.levelIndex === config.levels.length - 1;
+    // Зберігаємо: відкриваємо наступний рівень (або позначаємо, що гру завершено)
+    if (isLast) {
+      run.finished = true;
+      writeSave();
+    } else {
+      writeSave(run.levelIndex + 1, '');
+    }
     showOverlay({
       title: 'РІВЕНЬ ПРОЙДЕНО!',
       lines: [
@@ -229,20 +344,15 @@
   // Бот сам перевіряє ходи за правилами й рахує очки, тому підробити результат не вийде.
   const MOVE_CODE = { U: 0, D: 1, L: 2, R: 3 };
 
+  // Усі ходи всіх рівнів — одним рядком, по 2 біти на хід. Межі рівнів бот визначає сам:
+  // рівень закінчується в момент, коли всі ящики стали на цілі.
   function packSolutions(solutions) {
-    const lengths = solutions.map((m) => m.length);
-    const total = lengths.reduce((a, b) => a + b, 0);
-    const bytes = new Uint8Array(Math.ceil(total / 4));
-    let pos = 0;
-    solutions.forEach((m) => {
-      for (const ch of m) {
-        bytes[pos >> 2] |= MOVE_CODE[ch] << ((pos & 3) * 2);
-        pos += 1;
-      }
-    });
+    const all = solutions.join('');
+    const bytes = new Uint8Array(Math.ceil(all.length / 4));
+    for (let i = 0; i < all.length; i++) bytes[i >> 2] |= MOVE_CODE[all[i]] << ((i & 3) * 2);
     let bin = '';
     bytes.forEach((b) => { bin += String.fromCharCode(b); });
-    return JSON.stringify({ v: 1, n: lengths, d: btoa(bin) });
+    return JSON.stringify({ v: 2, n: all.length, d: btoa(bin) });
   }
 
   function finishGame() {
@@ -258,9 +368,15 @@
     lines.push({ text: 'Надсилаємо результат боту…' });
     showOverlay({ title: 'ВІТАЄМО!', lines, buttons: [] });
     try {
+      const payload = packSolutions(run.solutions);
+      if (payload.length > 4000) throw new Error('забагато ходів для одного повідомлення');
+      run.submitted = true; // після відправки «Продовжити» вже не пропонується
+      writeSave();
       // Після відправки Telegram сам закриє гру, а бот напише у чат місце в Залі слави
-      tg.sendData(packSolutions(run.solutions));
+      tg.sendData(payload);
     } catch (err) {
+      run.submitted = false;
+      writeSave();
       showOverlay({
         title: 'ВІТАЄМО!',
         lines: [
@@ -339,6 +455,7 @@
   function bindControls() {
     // Кнопки меню
     $('btn-new').addEventListener('click', startNewGame);
+    $('btn-continue').addEventListener('click', continueGame);
     $('btn-howto').addEventListener('click', () => showScreen('howto'));
     $('btn-scores').addEventListener('click', openScores);
     document.querySelectorAll('[data-action="back"]').forEach((b) => b.addEventListener('click', goToMenu));
@@ -428,7 +545,7 @@
     bindControls();
 
     try {
-      const res = await fetch('./levels.json', { cache: 'no-store' });
+      const res = await fetch('./levels.json?v=3', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       config = await res.json();
       const s = config.scoring;
@@ -441,6 +558,7 @@
       err.classList.remove('hidden');
       $('btn-new').disabled = true;
     }
+    refreshMenu();
   }
 
   init();
