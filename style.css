@@ -326,3 +326,57 @@ html, body {
 
 .continue-info { margin: -6px 0 2px; font-family: var(--pixel); font-size: 9px; line-height: 1.6; color: var(--yellow); text-align: center; }
 .hidden { display: none !important; }
+
+/* ---------- Горизонтальне положення телефона ---------- */
+/* Низькі широкі екрани: поле ліворуч, а лічильники, стрілки й кнопки — праворуч */
+@media (orientation: landscape) and (max-height: 560px) {
+  #app { max-width: none; }
+  .screen { padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+
+  /* Меню: ліворуч назва й малюнок, праворуч кнопки */
+  #screen-menu { overflow-y: auto; }
+  .menu-inner {
+    max-width: 760px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: 'plate buttons' 'subtitle buttons' 'sprites buttons' 'error error';
+    column-gap: 28px;
+    row-gap: 8px;
+    align-items: center;
+  }
+  .menu-inner .title-plate { grid-area: plate; padding: 14px 8px; align-self: end; }
+  .menu-inner .menu-sprites { grid-area: sprites; align-self: start; }
+  .menu-inner .menu-buttons { grid-area: buttons; gap: 12px; margin-top: 0; }
+  .menu-inner .menu-error { grid-area: error; }
+  .menu-buttons .btn { padding: 11px 10px; font-size: 12px; }
+  .title-plate h1 { font-size: 24px; }
+  .menu-inner .subtitle { grid-area: subtitle; margin: 0; justify-self: center; }
+
+  /* Гра: поле на всю висоту ліворуч, панель керування праворуч */
+  #screen-game {
+    display: none;
+    grid-template-columns: minmax(0, 1fr) minmax(210px, 36%);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas: 'board hud' 'board name' 'board dpad' 'board actions';
+    column-gap: 14px;
+    row-gap: 6px;
+  }
+  #screen-game.active { display: grid; }
+  #screen-game .board-wrap { grid-area: board; }
+  #screen-game .hud { grid-area: hud; padding: 6px 8px; }
+  #screen-game .hud-item { gap: 3px; }
+  #screen-game .level-name { grid-area: name; min-height: 0; }
+  #screen-game .dpad { grid-area: dpad; align-self: center; justify-self: center; grid-template-columns: repeat(3, 46px); grid-template-rows: repeat(2, 38px); gap: 4px; }
+  #screen-game .game-actions { grid-area: actions; flex-direction: column; gap: 8px; margin-top: 0; }
+  #screen-game .game-actions .btn { padding: 8px 4px; }
+
+  /* Вікна «Рівень пройдено» та сторінки з прокруткою */
+  .overlay { padding: 8px; }
+  .overlay-card { padding: 12px 14px; max-height: 100%; overflow-y: auto; max-width: 420px; }
+  .overlay-card h2 { margin-bottom: 8px; font-size: 13px; }
+  .overlay-card .line { margin: 5px 0; }
+  .overlay-buttons { flex-direction: row; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .overlay-buttons .btn { flex: 1 1 160px; padding: 9px 6px; }
+  .page { gap: 8px; }
+  .page-title { margin: 0; }
+}

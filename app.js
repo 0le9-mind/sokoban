@@ -513,6 +513,8 @@
     }, { passive: true });
 
     window.addEventListener('resize', () => { if (currentScreen === 'game') fitAndRender(); });
+    // після повороту телефона розміри встановлюються з невеликою затримкою
+    window.addEventListener('orientationchange', () => setTimeout(() => { if (currentScreen === 'game') fitAndRender(); }, 250));
   }
 
   // ---------- Малюнки-легенди в меню та інструкції ----------
@@ -545,7 +547,7 @@
     bindControls();
 
     try {
-      const res = await fetch('./levels.json?v=3', { cache: 'no-store' });
+      const res = await fetch('./levels.json?v=4', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       config = await res.json();
       const s = config.scoring;
