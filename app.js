@@ -96,14 +96,38 @@
     } catch (e) { /* збереження недоступне — гра працює й без нього */ }
   }
 
+  /** Чи проходить цей запис ходів рівень (у поточній версії гри). */
+  function solvesLevel(level, moves) {
+    if (typeof moves !== 'string' || !moves) return false;
+    const g = new SokobanGame(level.map);
+    for (const ch of moves) {
+      if (!'UDLR'.includes(ch) || !g.move(ch).moved) return false;
+      if (g.isSolved()) return ch === moves[moves.length - 1] && moves.length === g.moves.length;
+    }
+    return false;
+  }
+
+  /**
+   * Читає збереження. Якщо рівні в грі змінилися, зберігаємо стільки пройдених рівнів,
+   * скільки досі збігаються з новими, і продовжуємо з першого, що змінився.
+   */
   function readSave() {
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw || !config) return null;
       const d = JSON.parse(raw);
-      if (d.sig !== configSignature() || d.submitted) return null;
       if (!Array.isArray(d.solutions) || !Number.isInteger(d.levelIndex)) return null;
-      if (d.levelIndex < 0 || d.levelIndex >= config.levels.length) return null;
+      const n = config.levels.length;
+      let keep = 0;
+      while (keep < d.solutions.length && keep < n && solvesLevel(config.levels[keep], d.solutions[keep])) keep += 1;
+      if (keep === 0 && d.solutions.length > 0) return null;
+      if (keep < d.solutions.length) {
+        // рівні змінилися: повертаємось до першого рівня, що не збігається
+        const solutions = d.solutions.slice(0, keep);
+        const score = solutions.reduce((sum, m, i) => sum + levelScore(m.length, config.levels[i].par), 0);
+        return { levelIndex: keep, totalScore: score, solutions, current: '', finished: false, submitted: false };
+      }
+      if (d.levelIndex < 0 || d.levelIndex >= n) return null;
       if (d.solutions.length !== d.levelIndex + (d.finished ? 1 : 0)) return null;
       return d;
     } catch (e) {
@@ -124,7 +148,11 @@
     info.classList.toggle('hidden', !save);
     if (save) {
       const level = save.finished ? config.levels.length : save.levelIndex + 1;
-      info.textContent = `Рівень ${level} із ${config.levels.length} · SCORE ${save.totalScore}`;
+      // Якщо всі рівні вже пройдено, замість «Продовжити» можна ще раз надіслати результат боту
+      btn.textContent = save.finished ? '🏁 Надіслати результат' : '▶ Продовжити';
+      info.textContent = save.finished
+        ? `Усі рівні пройдено · SCORE ${save.totalScore}`
+        : `Рівень ${level} із ${config.levels.length} · SCORE ${save.totalScore}`;
     }
     const nb = $('btn-new');
     nb.classList.toggle('btn-green', !save);
@@ -281,6 +309,7 @@
   function restartLevel() {
     if (!run.game || run.locked) return;
     run.game.reset(); // ходи рівня обнуляються — рахунок піде з нуля
+    Sfx.restart();
     updateHud();
     render();
     writeSave();
@@ -290,17 +319,29 @@
     if (currentScreen !== 'game' || run.locked || !run.game) return;
     if (!run.game.undo()) return;
     haptic('light');
+    Sfx.undo();
     $('hud-moves').textContent = String(run.game.moves.length);
     updateUndoButton();
     render();
     writeSave();
   }
 
+  /** Скільки ящиків зараз стоїть на цілях (лимонах). */
+  function boxesOnGoals() {
+    let n = 0;
+    for (const k of run.game.boxes) if (run.game.goals.has(k)) n += 1;
+    return n;
+  }
+
   function tryMove(dir) {
     if (currentScreen !== 'game' || run.locked || !run.game) return;
+    const before = boxesOnGoals();
     const result = run.game.move(dir);
     if (!result.moved) return;
-    if (result.pushed) haptic('light');
+    if (result.pushed) {
+      haptic('light');
+      if (boxesOnGoals() > before) Sfx.goalIn(); else Sfx.push();
+    }
     $('hud-moves').textContent = String(run.game.moves.length);
     updateUndoButton();
     render();
@@ -318,6 +359,7 @@
     haptic('success');
 
     const isLast = run.levelIndex === config.levels.length - 1;
+    if (isLast) Sfx.win(); else Sfx.level();
     // Зберігаємо: відкриваємо наступний рівень (або позначаємо, що гру завершено)
     if (isLast) {
       run.finished = true;
@@ -451,8 +493,32 @@
     return li;
   }
 
+  // ---------- Звук ----------
+  function updateSoundButtons() {
+    const on = Sfx.isEnabled();
+    $('btn-sound-menu').textContent = on ? '🔊 Звук: увімкнено' : '🔇 Звук: вимкнено';
+    $('btn-sound-hud').textContent = on ? '🔊' : '🔇';
+    $('btn-sound-hud').setAttribute('aria-label', on ? 'Вимкнути звук' : 'Увімкнути звук');
+  }
+
+  function toggleSound() {
+    Sfx.setEnabled(!Sfx.isEnabled());
+    updateSoundButtons();
+  }
+
   // ---------- Керування ----------
   function bindControls() {
+    // Звук можна запускати лише після першого дотику користувача
+    ['pointerdown', 'keydown'].forEach((ev) => window.addEventListener(ev, () => Sfx.unlock(), { once: true, capture: true }));
+    // Тихий «клік» на звичайних кнопках меню та ігрового екрана
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest && e.target.closest('.btn');
+      if (b && b.id !== 'btn-sound-menu') Sfx.click();
+    });
+    $('btn-sound-menu').addEventListener('click', toggleSound);
+    $('btn-sound-hud').addEventListener('click', toggleSound);
+    updateSoundButtons();
+
     // Кнопки меню
     $('btn-new').addEventListener('click', startNewGame);
     $('btn-continue').addEventListener('click', continueGame);
@@ -547,7 +613,7 @@
     bindControls();
 
     try {
-      const res = await fetch('./levels.json?v=4', { cache: 'no-store' });
+      const res = await fetch('./levels.json?v=6', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       config = await res.json();
       const s = config.scoring;

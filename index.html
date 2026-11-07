@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="./style.css?v=4">
+  <link rel="stylesheet" href="./style.css?v=6">
   <!-- Бібліотека Telegram Mini Apps -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
@@ -39,6 +39,7 @@
           <button class="btn btn-green" id="btn-new">🎮 Нова гра</button>
           <button class="btn btn-pink" id="btn-howto">📜 Як грати</button>
           <button class="btn btn-yellow" id="btn-scores">🏆 Зал слави</button>
+          <button class="btn btn-sound" id="btn-sound-menu">🔊 Звук: увімкнено</button>
         </div>
         <p class="menu-error hidden" id="menu-error"></p>
       </div>
@@ -84,6 +85,7 @@
         <div class="hud-item"><span class="hud-label">SCORE</span><span class="hud-value" id="hud-score">000000</span></div>
         <div class="hud-item"><span class="hud-label">LEVEL</span><span class="hud-value" id="hud-level">01/01</span></div>
         <div class="hud-item"><span class="hud-label">MOVES</span><span class="hud-value" id="hud-moves">0</span></div>
+        <button class="hud-sound" id="btn-sound-hud" aria-label="Звук">🔊</button>
       </header>
       <div class="level-name" id="level-name"></div>
 
@@ -126,8 +128,9 @@
     </section>
   </div>
 
-  <script src="./sprites.js?v=4"></script>
-  <script src="./game.js?v=4"></script>
-  <script src="./app.js?v=4"></script>
+  <script src="./sprites.js?v=6"></script>
+  <script src="./game.js?v=6"></script>
+  <script src="./sounds.js?v=6"></script>
+  <script src="./app.js?v=6"></script>
 </body>
 </html>

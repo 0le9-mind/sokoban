@@ -3,7 +3,7 @@
  * Кожен спрайт малюється один раз на маленькому canvas, а потім
  * масштабується без згладжування — так зберігається «піксельний» вигляд.
  *
- * Палітра (рожеві стіни, світло-коричневі ящики, лимонно-жовті цілі, темно-синя підлога) легко змінюється нижче.
+ * Палітра (рожеві стіни, світло-коричневі ящики, цілі-лимони, темно-синя підлога) легко змінюється нижче.
  */
 (function (global) {
   'use strict';
@@ -42,6 +42,28 @@
     eye: '#10123a',
   };
 
+
+  // Піксельний лимон 16×16: O — контур, Y/M/S/D — від світлого до темного, H — блик, P — пори шкірки
+  const LEMON = [
+    '................',
+    '................',
+    '................',
+    '......OOOOOOO...',
+    '....OOYPYYPMMO..',
+    '...OYYYYYMMMMSOO',
+    '..OYHHYPMMPSSPSO',
+    '.OYPHYPMMPSSPDO.',
+    '.OYYMMMMSSSSDDO.',
+    '.OYPMMPSSPDDDDO.',
+    'OMPMMPSSPDDDDO..',
+    'OOMMSSSDDDDDO...',
+    '..OSSPDDDDOO....',
+    '...OOOOOOO......',
+    '................',
+    '................',
+  ];
+  const LEMON_COLORS = { O: '#a38300', Y: '#fff75e', M: '#ffee2e', S: '#f7d800', D: '#e6bf00', H: '#ffffd0', P: '#dcb900' };
+
   function rect(ctx, color, x, y, w, h) {
     ctx.fillStyle = color;
     ctx.fillRect(x, y, w, h);
@@ -70,19 +92,15 @@
       }
     },
 
+    // Ціль — лимон: жовтий плід із носиками, шкіркою-текстурою та бліком
     goal(ctx) {
       painters.floor(ctx);
-      // Ромб-«мішень»: жовта рамка та темна середина
-      for (let i = 0; i < 4; i++) {
-        rect(ctx, COLORS.goal, 7 - i, 4 + i, 2 + 2 * i, 1);
-        rect(ctx, COLORS.goal, 7 - i, 11 - i, 2 + 2 * i, 1);
-      }
-      for (let i = 0; i < 3; i++) {
-        rect(ctx, COLORS.floor, 7 - i, 5 + i, 2 + 2 * i, 1);
-        rect(ctx, COLORS.floor, 7 - i, 10 - i, 2 + 2 * i, 1);
-      }
-      // лимонна «світлинка» в центрі, щоб ціль було добре видно
-      rect(ctx, COLORS.goal, 7, 7, 2, 2);
+      LEMON.forEach((row, y) => {
+        for (let x = 0; x < SIZE; x++) {
+          const color = LEMON_COLORS[row[x]];
+          if (color) rect(ctx, color, x, y, 1, 1);
+        }
+      });
     },
 
     box(ctx, done) {
