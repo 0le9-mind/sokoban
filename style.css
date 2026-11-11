@@ -146,7 +146,17 @@ html, body {
   margin-top: 6px;
 }
 .menu-buttons .btn { width: 100%; font-size: 14px; padding: 16px 12px; }
+#screen-menu { overflow-y: auto; }
+/* Низькі екрани: щільніше меню, щоб усі кнопки вміщались (інакше меню прокручується) */
+@media (max-height: 760px) {
+  .menu-inner { gap: 10px; }
+  .menu-buttons { gap: 10px; }
+  .menu-buttons .btn { padding: 11px 10px; font-size: 12px; }
+  .title-plate h1 { font-size: 24px; }
+  .menu-sprites canvas { transform: scale(.8); margin: -4px -6px; }
+}
 .menu-error { font-family: var(--pixel); font-size: 9px; line-height: 1.6; color: var(--red); text-align: center; margin: 0; }
+.menu-error.ok { color: var(--green); }
 
 /* ---------- Сторінки (інструкція, зал слави) ---------- */
 .page { display: flex; flex-direction: column; height: 100%; gap: 12px; }
@@ -310,6 +320,13 @@ html, body {
 .overlay-card .line { margin: 8px 0; font-family: var(--pixel); font-size: 10px; line-height: 1.7; color: var(--text); }
 .overlay-card .line.big { font-size: 14px; color: var(--green); }
 .overlay-card .line.error { color: var(--red); }
+.overlay-input {
+  width: 100%; margin-top: 12px; padding: 12px 10px; box-sizing: border-box;
+  font-family: var(--pixel); font-size: 12px; color: var(--text); background: #0b1140;
+  border: 3px solid var(--pink-light); border-radius: 0; outline: none; text-align: center;
+}
+.overlay-input:focus { border-color: var(--green); }
+.overlay-card .line.ok { color: var(--green); }
 .overlay-buttons { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
 .overlay-buttons .btn { width: 100%; font-size: 12px; }
 
@@ -348,7 +365,8 @@ html, body {
   .menu-inner .menu-sprites { grid-area: sprites; align-self: start; }
   .menu-inner .menu-buttons { grid-area: buttons; gap: 12px; margin-top: 0; }
   .menu-inner .menu-error { grid-area: error; }
-  .menu-buttons .btn { padding: 11px 10px; font-size: 12px; }
+  .menu-buttons .btn { padding: 9px 10px; font-size: 11px; }
+  .menu-inner .menu-buttons { gap: 8px; }
   .title-plate h1 { font-size: 24px; }
   .menu-inner .subtitle { grid-area: subtitle; margin: 0; justify-self: center; }
 

@@ -23,12 +23,14 @@
   const canvas = $('board');
   const boardWrap = $('board-wrap');
 
-  let config = null; // { scoring, levels } із levels.json
+  let config = null; // { scoring, chapter_size, levels } із levels.json
   let currentScreen = 'menu';
   const run = {
     levelIndex: 0,
     totalScore: 0,
     solutions: [], // ходи кожного пройденого рівня (їх перевірить бот)
+    sendFrom: 0, // з якого розділу починати наступну відправку результату (через бота)
+    synced: {}, // розділи, уже збережені в Firebase: { 'c3': очки }
     game: null,
     locked: false, // true, поки показано вікно «рівень пройдено»
     tile: 32,
@@ -91,7 +93,8 @@
         solutions: run.solutions,
         current: current === undefined ? run.game.moves : current,
         finished: Boolean(run.finished),
-        submitted: Boolean(run.submitted),
+        sendFrom: run.sendFrom || 0,
+        synced: run.synced || {},
       }));
     } catch (e) { /* збереження недоступне — гра працює й без нього */ }
   }
@@ -125,7 +128,7 @@
         // рівні змінилися: повертаємось до першого рівня, що не збігається
         const solutions = d.solutions.slice(0, keep);
         const score = solutions.reduce((sum, m, i) => sum + levelScore(m.length, config.levels[i].par), 0);
-        return { levelIndex: keep, totalScore: score, solutions, current: '', finished: false, submitted: false };
+        return { levelIndex: keep, totalScore: score, solutions, current: '', finished: false, sendFrom: 0, synced: {} };
       }
       if (d.levelIndex < 0 || d.levelIndex >= n) return null;
       if (d.solutions.length !== d.levelIndex + (d.finished ? 1 : 0)) return null;
@@ -139,20 +142,28 @@
     try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* нічого */ }
   }
 
-  /** Показує або ховає «Продовжити» залежно від наявності збереження. */
+  /** Показує або ховає «Продовжити» та «Надіслати результат» залежно від наявності збереження. */
   function refreshMenu() {
     const save = config ? readSave() : null;
     const btn = $('btn-continue');
     const info = $('continue-info');
-    btn.classList.toggle('hidden', !save);
+    const send = $('btn-send');
+    const done = save ? chaptersDone(save.solutions.length) : 0;
+    btn.classList.toggle('hidden', !save || save.finished);
     info.classList.toggle('hidden', !save);
+    send.classList.toggle('hidden', done === 0);
     if (save) {
       const level = save.finished ? config.levels.length : save.levelIndex + 1;
-      // Якщо всі рівні вже пройдено, замість «Продовжити» можна ще раз надіслати результат боту
-      btn.textContent = save.finished ? '🏁 Надіслати результат' : '▶ Продовжити';
       info.textContent = save.finished
         ? `Усі рівні пройдено · SCORE ${save.totalScore}`
         : `Рівень ${level} із ${config.levels.length} · SCORE ${save.totalScore}`;
+    }
+    if (done > 0 && cloudOn()) {
+      send.textContent = '☁ Зберегти в Зал слави';
+    } else if (done > 0) {
+      const batch = buildBatch(save.solutions, save.sendFrom || 0);
+      const range = batch ? chapterRange(batch.chapters) : '';
+      send.textContent = '📤 Надіслати результат' + (range ? ` (розділ ${range})` : '');
     }
     const nb = $('btn-new');
     nb.classList.toggle('btn-green', !save);
@@ -172,7 +183,8 @@
     run.totalScore = save.totalScore;
     run.solutions = save.solutions.slice();
     run.finished = false;
-    run.submitted = false;
+    run.sendFrom = save.sendFrom || 0;
+    run.synced = save.synced || {};
     showScreen('game');
     if (save.finished) {
       loadLevel(save.levelIndex);
@@ -195,8 +207,9 @@
   // ---------- HUD ----------
   function updateHud() {
     $('hud-score').textContent = String(run.totalScore).padStart(6, '0');
-    $('hud-level').textContent =
-      String(run.levelIndex + 1).padStart(2, '0') + '/' + String(config.levels.length).padStart(2, '0');
+    const levelText = (run.levelIndex + 1) + '/' + config.levels.length;
+    $('hud-level').textContent = levelText;
+    $('hud-level').style.fontSize = levelText.length > 6 ? 'clamp(9px, 2.9vw, 13px)' : '';
     $('hud-moves').textContent = String(run.game ? run.game.moves.length : 0);
     $('level-name').textContent = config.levels[run.levelIndex].name.toUpperCase();
     updateUndoButton();
@@ -269,10 +282,23 @@
       btn.addEventListener('click', b.onClick);
       buttons.appendChild(btn);
     });
+    const input = $('overlay-input');
+    input.classList.toggle('hidden', !opts.input);
+    if (opts.input) input.value = opts.input.value || '';
     $('overlay').classList.remove('hidden');
+    if (opts.input) setTimeout(() => { try { input.focus(); } catch (e) { /* не критично */ } }, 50);
+  }
+
+  function addOverlayLine(text, cls) {
+    const p = document.createElement('p');
+    p.className = 'line' + (cls ? ' ' + cls : '');
+    p.textContent = text;
+    $('overlay-lines').appendChild(p);
+    return p;
   }
 
   function hideOverlay() {
+    $('overlay-input').classList.add('hidden');
     $('overlay').classList.add('hidden');
   }
 
@@ -291,7 +317,8 @@
     run.totalScore = 0;
     run.solutions = [];
     run.finished = false;
-    run.submitted = false;
+    run.sendFrom = 0;
+    run.synced = {};
     loadLevel(0);
     writeSave(); // нова гра одразу замінює старе збереження
     showScreen('game');
@@ -359,6 +386,7 @@
     haptic('success');
 
     const isLast = run.levelIndex === config.levels.length - 1;
+    const chapterEnd = isLast || run.solutions.length % chapterSize() === 0;
     if (isLast) Sfx.win(); else Sfx.level();
     // Зберігаємо: відкриваємо наступний рівень (або позначаємо, що гру завершено)
     if (isLast) {
@@ -367,71 +395,269 @@
     } else {
       writeSave(run.levelIndex + 1, '');
     }
-    showOverlay({
-      title: 'РІВЕНЬ ПРОЙДЕНО!',
-      lines: [
-        { text: `Кроків: ${moves} (еталон: ${level.par})` },
-        { text: `+${points} очок`, cls: 'big' },
-      ],
-      buttons: [
-        isLast
-          ? { text: '🏁 Завершити гру', cls: 'btn-green', onClick: finishGame }
-          : { text: '▶ Далі', cls: 'btn-green', onClick: () => loadLevel(run.levelIndex + 1) },
-      ],
+    presentSolved({ level, moves, points, chapterEnd, isLast });
+  }
+
+  /** Вікно «рівень пройдено». Наприкінці розділу ще й зберігає результат (у Firebase або через бота). */
+  function presentSolved(info) {
+    const { level, moves, points, chapterEnd, isLast } = info;
+    const cloud = chapterEnd && cloudOn();
+    const lines = [
+      { text: `Кроків: ${moves} (еталон: ${level.par})` },
+      { text: `+${points} очок`, cls: 'big' },
+    ];
+    const buttons = [];
+    if (chapterEnd) {
+      lines.push({ text: `Розділ ${Math.ceil(run.solutions.length / chapterSize())} пройдено!`, cls: 'big' });
+      if (!isLast && !cloud) lines.push({ text: 'Можна надіслати результат боту в Зал слави (гра на мить закриється) або грати далі.' });
+    }
+    if (isLast) buttons.push({ text: '🏁 Завершити гру', cls: 'btn-green', onClick: finishGame });
+    else {
+      buttons.push({ text: '▶ Далі', cls: 'btn-green', onClick: () => loadLevel(run.levelIndex + 1) });
+      if (chapterEnd && !cloud) buttons.push({ text: '📤 Надіслати результат', cls: 'btn-yellow', onClick: () => sendResults(run.solutions, run.sendFrom) });
+    }
+    showOverlay({ title: isLast ? 'ВСІ РІВНІ ПРОЙДЕНО!' : 'РІВЕНЬ ПРОЙДЕНО!', lines, buttons });
+    if (cloud && !isLast) cloudStep(() => presentSolved(info));
+  }
+
+  /** Крок збереження у хмару всередині вікна: спершу ім'я (якщо потрібне), потім запис і повтор у разі помилки. */
+  function cloudStep(redraw) {
+    const box = $('overlay-buttons');
+    if (!Cloud.playerName()) {
+      const b = document.createElement('button');
+      b.className = 'btn btn-yellow';
+      b.textContent = '✍ Вказати ім\'я для Залу слави';
+      b.addEventListener('click', () => ensureName(redraw));
+      box.appendChild(b);
+      addOverlayLine('Щоб результат потрапив у Зал слави, вкажіть ім\'я.');
+      return;
+    }
+    const el = addOverlayLine('');
+    runCloudUpload(run.solutions, el).then((ok) => {
+      if (ok) return;
+      const b = document.createElement('button');
+      b.className = 'btn btn-yellow';
+      b.textContent = '🔁 Зберегти ще раз';
+      b.addEventListener('click', () => { b.remove(); cloudStep(redraw); });
+      box.appendChild(b);
     });
   }
 
-  // ---------- Завершення гри та відправка результату ----------
-  // Ходи пакуються (2 біти на хід) і надсилаються боту через Telegram (sendData).
-  // Бот сам перевіряє ходи за правилами й рахує очки, тому підробити результат не вийде.
+  // ---------- Надсилання результату ----------
+  // Гра ділиться на розділи по chapter_size рівнів. Ходи пройдених розділів пакуються (2 біти на хід)
+  // і надсилаються боту через Telegram (sendData). Бот сам перевіряє ходи за правилами й рахує очки,
+  // тому підробити результат не вийде. Ліміт одного повідомлення — 4096 байт, тож за раз
+  // відправляється стільки розділів, скільки влізе; наступне натискання шле наступну порцію.
   const MOVE_CODE = { U: 0, D: 1, L: 2, R: 3 };
+  const MAX_PAYLOAD = 3800;
 
-  // Усі ходи всіх рівнів — одним рядком, по 2 біти на хід. Межі рівнів бот визначає сам:
-  // рівень закінчується в момент, коли всі ящики стали на цілі.
-  function packSolutions(solutions) {
-    const all = solutions.join('');
-    const bytes = new Uint8Array(Math.ceil(all.length / 4));
-    for (let i = 0; i < all.length; i++) bytes[i >> 2] |= MOVE_CODE[all[i]] << ((i & 3) * 2);
+  function chapterSize() { return (config && config.chapter_size) || 25; }
+
+  /** Скільки розділів пройдено повністю (при заданій кількості пройдених рівнів). */
+  function chaptersDone(solved) {
+    const n = config.levels.length, size = chapterSize();
+    return solved >= n ? Math.ceil(n / size) : Math.floor(solved / size);
+  }
+
+  function packMoves(text) {
+    const bytes = new Uint8Array(Math.ceil(text.length / 4));
+    for (let i = 0; i < text.length; i++) bytes[i >> 2] |= MOVE_CODE[text[i]] << ((i & 3) * 2);
     let bin = '';
     bytes.forEach((b) => { bin += String.fromCharCode(b); });
-    return JSON.stringify({ v: 2, n: all.length, d: btoa(bin) });
+    return btoa(bin);
+  }
+
+  /** Збирає порцію розділів, починаючи з розділу `from` (по колу), у межах ліміту повідомлення. */
+  function buildBatch(solutions, from) {
+    const done = chaptersDone(solutions.length);
+    if (done === 0) return null;
+    const size = chapterSize();
+    const start = from >= 0 && from < done ? from : 0;
+    const items = [];
+    const chapters = [];
+    let length = 12; // {"v":3,"p":[]}
+    for (let step = 0; step < done; step++) {
+      const c = (start + step) % done;
+      const moves = solutions.slice(c * size, (c + 1) * size).join('');
+      const item = JSON.stringify([c, moves.length, packMoves(moves)]);
+      if (length + item.length + 1 > MAX_PAYLOAD) break;
+      items.push(item);
+      chapters.push(c);
+      length += item.length + 1;
+    }
+    if (!chapters.length) return { payload: null, chapters: [], next: start };
+    return {
+      payload: '{"v":3,"p":[' + items.join(',') + ']}',
+      chapters,
+      next: (chapters[chapters.length - 1] + 1) % done,
+    };
+  }
+
+  /** «1–3» або «5» для списку розділів (нумерація для людей, з одиниці). */
+  function chapterRange(chapters) {
+    if (!chapters.length) return '';
+    const sorted = chapters.map((c) => c + 1).sort((a, b) => a - b);
+    let contiguous = true;
+    for (let i = 1; i < sorted.length; i++) if (sorted[i] !== sorted[i - 1] + 1) contiguous = false;
+    if (sorted.length === 1) return String(sorted[0]);
+    return contiguous ? `${sorted[0]}–${sorted[sorted.length - 1]}` : sorted.join(', ');
+  }
+
+  /** Дописує поля у збереження (без запуску гри). */
+  function patchSave(fields) {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return;
+      localStorage.setItem(SAVE_KEY, JSON.stringify(Object.assign(JSON.parse(raw), fields)));
+    } catch (e) { /* не критично */ }
+  }
+
+  /** Запам'ятовує, з якого розділу почати наступну відправку через бота. */
+  function rememberSendFrom(next) {
+    run.sendFrom = next;
+    patchSave({ sendFrom: next });
+  }
+
+  function showMenuError(text, ok) {
+    const err = $('menu-error');
+    err.textContent = text;
+    err.classList.toggle('hidden', !text);
+    err.classList.toggle('ok', Boolean(ok));
+  }
+
+  // ---------- Хмарний Зал слави (Firebase) ----------
+  function cloudOn() { return Boolean(window.Cloud && Cloud.enabled()); }
+
+  /** Усі пройдені розділи у вигляді [{c, score, moves, d}] для збереження в базі. */
+  function chapterItems(solutions) {
+    const size = chapterSize();
+    const items = [];
+    for (let c = 0; c < chaptersDone(solutions.length); c++) {
+      const part = solutions.slice(c * size, (c + 1) * size);
+      let score = 0;
+      part.forEach((m, i) => { score += levelScore(m.length, config.levels[c * size + i].par); });
+      const moves = part.join('');
+      items.push({ c, score, moves: moves.length, d: packMoves(moves) });
+    }
+    return items;
+  }
+
+  /** Просить ввести ім'я (якщо Telegram його не передав), потім викликає next(). */
+  function ensureName(next) {
+    if (Cloud.playerName()) { next(); return; }
+    showOverlay({
+      title: 'ТВОЄ ІМ\'Я',
+      lines: [{ text: 'Під цим іменем ти з\'явишся в Залі слави.' }],
+      input: { value: '' },
+      buttons: [{
+        text: '💾 Зберегти',
+        cls: 'btn-green',
+        onClick: () => {
+          if (!Cloud.setName($('overlay-input').value)) { $('overlay-input').focus(); return; }
+          next();
+        },
+      }],
+    });
+  }
+
+  /** Зберігає у Firebase нові або покращені розділи. Повертає { score, chapters, rank }. */
+  async function cloudUpload(solutions) {
+    const items = chapterItems(solutions).filter((it) => run.synced['c' + it.c] !== it.score);
+    let res;
+    if (items.length) {
+      res = await Cloud.submit(items);
+      items.forEach((it) => { run.synced['c' + it.c] = it.score; });
+      patchSave({ synced: run.synced });
+    } else {
+      const top = await Cloud.fetchTop(0);
+      res = { score: top.myScore, rank: top.myRank, chapters: chaptersDone(solutions.length) };
+    }
+    return res;
+  }
+
+  function cloudSummary(res) {
+    const place = res.rank ? ` Місце в Залі слави: #${res.rank}.` : '';
+    return `☁ Збережено! Розділів: ${res.chapters}, очок: ${res.score}.${place}`;
+  }
+
+  /** Збереження в хмару з показом стану у вікні (el — рядок статусу) або в меню. */
+  function runCloudUpload(solutions, el) {
+    const say = (text, kind) => {
+      if (el) { el.textContent = text; el.className = 'line' + (kind ? ' ' + kind : ''); }
+      else showMenuError(text, kind === 'ok');
+    };
+    say('☁ Зберігаємо в Зал слави…');
+    return cloudUpload(solutions).then(
+      (res) => { say(cloudSummary(res), 'ok'); return true; },
+      (err) => { say('Не вдалося зберегти: ' + (err && err.message ? err.message : 'помилка') + '. Спробуйте ще раз із меню («📤 Надіслати результат»).', 'error'); return false; }
+    );
+  }
+
+  /** Надсилає боту порцію розділів. Після sendData Telegram сам закриває гру, а бот пише у чат місце в Залі слави. */
+  function sendResults(solutions, from) {
+    if (cloudOn()) {
+      ensureName(() => {
+        hideOverlay();
+        runCloudUpload(solutions, null);
+      });
+      return;
+    }
+    const batch = buildBatch(solutions, from || 0);
+    if (!batch || !batch.payload) {
+      sendFailed('Розділ завеликий для одного повідомлення. Напишіть розробнику.');
+      return;
+    }
+    if (!IN_TELEGRAM) {
+      sendFailed('Результат не збережено: гру відкрито не через Telegram.');
+      return;
+    }
+    try {
+      rememberSendFrom(batch.next);
+      tg.sendData(batch.payload);
+    } catch (err) {
+      sendFailed('Не вдалося надіслати результат. Закрийте гру й відкрийте її кнопкою «🎮 Грати в Сокобан» внизу чату з ботом.');
+    }
+  }
+
+  function sendFailed(text) {
+    if (currentScreen === 'game') {
+      showOverlay({
+        title: 'ОЙ…',
+        lines: [{ text, cls: 'error' }],
+        buttons: [{ text: '🏠 В меню', cls: 'btn-pink', onClick: goToMenu }],
+      });
+    } else {
+      showMenuError(text);
+    }
+  }
+
+  function sendFromMenu() {
+    const save = readSave();
+    if (!save) { refreshMenu(); return; }
+    showMenuError('');
+    run.synced = save.synced || {};
+    sendResults(save.solutions, save.sendFrom || 0);
   }
 
   function finishGame() {
     const lines = [
-      { text: 'Усі рівні пройдено!' },
+      { text: 'Усі 1000 рівнів пройдено! Ви — легенда складу.' },
       { text: `SCORE: ${run.totalScore}`, cls: 'big' },
     ];
-    if (!IN_TELEGRAM) {
-      lines.push({ text: 'Результат не збережено: гру відкрито не через Telegram.', cls: 'error' });
+    if (cloudOn()) {
       showOverlay({ title: 'ВІТАЄМО!', lines, buttons: [{ text: '🏠 В меню', cls: 'btn-pink', onClick: goToMenu }] });
+      cloudStep(finishGame);
       return;
     }
-    lines.push({ text: 'Надсилаємо результат боту…' });
-    showOverlay({ title: 'ВІТАЄМО!', lines, buttons: [] });
-    try {
-      const payload = packSolutions(run.solutions);
-      if (payload.length > 4000) throw new Error('забагато ходів для одного повідомлення');
-      run.submitted = true; // після відправки «Продовжити» вже не пропонується
-      writeSave();
-      // Після відправки Telegram сам закриє гру, а бот напише у чат місце в Залі слави
-      tg.sendData(payload);
-    } catch (err) {
-      run.submitted = false;
-      writeSave();
-      showOverlay({
-        title: 'ВІТАЄМО!',
-        lines: [
-          { text: `SCORE: ${run.totalScore}`, cls: 'big' },
-          { text: 'Не вдалося надіслати результат.', cls: 'error' },
-          { text: 'Закрийте гру й відкрийте її кнопкою «🎮 Грати в Сокобан» внизу чату з ботом.', cls: 'error' },
-        ],
-        buttons: [
-          { text: '🔁 Спробувати ще раз', cls: 'btn-green', onClick: finishGame },
-          { text: '🏠 В меню', cls: 'btn-pink', onClick: goToMenu },
-        ],
-      });
-    }
+    lines.push({ text: 'Надішліть результат боту: кнопка надсилає розділи порціями. Якщо їх багато, натискайте «📤 Надіслати результат» у меню, доки не пройдуть усі.' });
+    showOverlay({
+      title: 'ВІТАЄМО!',
+      lines,
+      buttons: [
+        { text: '📤 Надіслати результат', cls: 'btn-green', onClick: () => sendResults(run.solutions, run.sendFrom) },
+        { text: '🏠 В меню', cls: 'btn-pink', onClick: goToMenu },
+      ],
+    });
   }
 
   // ---------- Зал слави ----------
@@ -450,11 +676,33 @@
     }
   }
 
+  async function openCloudScores(list, status) {
+    status.textContent = '☁ Завантажуємо Зал слави…';
+    try {
+      const res = await Cloud.fetchTop(10);
+      list.textContent = '';
+      if (!res.top.length) { status.textContent = 'Поки що нікого немає. Пройди розділ і стань першим!'; return; }
+      status.textContent = '';
+      const me = Cloud.playerId();
+      res.top.forEach((p, i) => list.appendChild(scoreRow(i + 1, p.name, p.score, p.id === me)));
+      if (res.myRank && res.myRank > res.top.length) {
+        const sep = document.createElement('li');
+        sep.className = 'sep';
+        sep.textContent = '• • •';
+        list.appendChild(sep);
+        list.appendChild(scoreRow(res.myRank, 'Ви', res.myScore, true));
+      }
+    } catch (e) {
+      status.textContent = 'Не вдалося завантажити Зал слави: ' + (e && e.message ? e.message : 'помилка') + '.';
+    }
+  }
+
   function openScores() {
     showScreen('scores');
     const list = $('score-list');
     const status = $('score-status');
     list.textContent = '';
+    if (cloudOn()) { openCloudScores(list, status); return; }
     const data = readTop();
     if (!data) {
       status.textContent = 'Рейтинг показується, коли гру відкрито кнопкою «🎮 Грати в Сокобан» у чаті з ботом. Також працює команда /top.';
@@ -522,6 +770,15 @@
     // Кнопки меню
     $('btn-new').addEventListener('click', startNewGame);
     $('btn-continue').addEventListener('click', continueGame);
+    $('btn-send').addEventListener('click', sendFromMenu);
+    const botLink = String((window.SOKOBAN_CONFIG && window.SOKOBAN_CONFIG.botLink) || '').trim();
+    if (/^https:\/\/t\.me\//.test(botLink)) {
+      $('btn-bot').classList.remove('hidden');
+      $('btn-bot').addEventListener('click', () => {
+        try { if (tg && tg.openTelegramLink) { tg.openTelegramLink(botLink); return; } } catch (e) { /* далі звичайне посилання */ }
+        window.open(botLink, '_blank');
+      });
+    }
     $('btn-howto').addEventListener('click', () => showScreen('howto'));
     $('btn-scores').addEventListener('click', openScores);
     document.querySelectorAll('[data-action="back"]').forEach((b) => b.addEventListener('click', goToMenu));
@@ -613,7 +870,7 @@
     bindControls();
 
     try {
-      const res = await fetch('./levels.json?v=6', { cache: 'no-store' });
+      const res = await fetch('./levels.json?v=7', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       config = await res.json();
       const s = config.scoring;
