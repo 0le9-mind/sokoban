@@ -142,6 +142,20 @@
     try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* нічого */ }
   }
 
+  /** Визначає горизонтальну/вертикальну розкладку за розміром вікна й підганяє поле. */
+  let lastSize = '';
+  function applyLayout() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const key = w + 'x' + h;
+    if (key === lastSize) return;
+    lastSize = key;
+    const root = document.documentElement;
+    root.dataset.layout = w > h && h <= 560 ? 'landscape' : 'portrait';
+    root.style.setProperty('--app-h', h + 'px');
+    if (currentScreen === 'game') fitAndRender();
+  }
+
   /** Показує або ховає «Продовжити» та «Надіслати результат» залежно від наявності збереження. */
   function refreshMenu() {
     const save = config ? readSave() : null;
@@ -835,9 +849,16 @@
       else tryMove(dy > 0 ? 'D' : 'U');
     }, { passive: true });
 
-    window.addEventListener('resize', () => { if (currentScreen === 'game') fitAndRender(); });
-    // після повороту телефона розміри встановлюються з невеликою затримкою
-    window.addEventListener('orientationchange', () => setTimeout(() => { if (currentScreen === 'game') fitAndRender(); }, 250));
+    // Розкладка за реальним розміром вікна: надійніше за media-запити, коли Telegram запізнюється після повороту
+    const relayout = () => setTimeout(applyLayout, 0);
+    applyLayout();
+    window.addEventListener('resize', relayout);
+    window.addEventListener('orientationchange', () => [100, 350, 800, 1600].forEach((ms) => setTimeout(applyLayout, ms)));
+    window.addEventListener('pageshow', relayout);
+    document.addEventListener('visibilitychange', relayout);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', relayout);
+    try { if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', () => [100, 400, 900].forEach((ms) => setTimeout(applyLayout, ms))); } catch (e) { /* не критично */ }
+    setInterval(applyLayout, 700); // запасний варіант: перевіряє розмір, навіть якщо подію не надіслали
   }
 
   // ---------- Малюнки-легенди в меню та інструкції ----------
@@ -862,7 +883,7 @@
         tg.setBackgroundColor(BG_COLOR);
         if (tg.disableVerticalSwipes) tg.disableVerticalSwipes(); // свайп вниз не закриває гру
         if (tg.BackButton) tg.BackButton.onClick(goToMenu);
-        tg.onEvent('viewportChanged', () => { if (currentScreen === 'game') fitAndRender(); });
+        tg.onEvent('viewportChanged', () => { lastSize = ''; applyLayout(); });
       } catch (e) { /* старі версії Telegram */ }
     }
 
@@ -870,7 +891,7 @@
     bindControls();
 
     try {
-      const res = await fetch('./levels.json?v=7', { cache: 'no-store' });
+      const res = await fetch('./levels.json?v=8', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       config = await res.json();
       const s = config.scoring;
