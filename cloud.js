@@ -95,9 +95,10 @@
   /**
    * Зберігає розділи [{c, score, moves, d}]. У базі лишається найкращий результат кожного розділу,
    * а рядок гравця містить суму найкращих очок за всі розділи.
-   * Повертає { score, chapters, rank, improved }.
+   * need — скільки розділів треба пройти, щоб потрапити в Зал слави (усі розділи гри).
+   * Повертає { score, chapters, rank, improved }; rank = null, поки пройдено не все.
    */
-  async function submit(items) {
+  async function submit(items, need) {
     const id = playerId();
     const name = playerName();
     if (!name) throw new Error('не вказано ім\'я');
@@ -122,22 +123,30 @@
     let score = 0, moves = 0, chapters = 0;
     Object.keys(best).forEach((k) => { score += best[k].score; moves += best[k].moves; chapters += 1; });
     await request('PUT', `/players/${id}`, { name, score, moves, chapters, t: now });
-    const top = await fetchTop(0);
+    const top = await fetchTop(0, need);
     return { score, chapters, rank: top.myRank, improved };
   }
 
-  /** Топ гравців. limit = 0 — лише місце поточного гравця. */
-  async function fetchTop(limit) {
+  /** Топ гравців, які пройшли не менше need розділів (тобто всю гру). limit = 0 — лише місце поточного гравця. */
+  async function fetchTop(limit, need) {
     const all = (await request('GET', '/players')) || {};
     const me = playerId();
-    const rows = Object.keys(all)
-      .map((id) => ({ id, name: String((all[id] && all[id].name) || '?').slice(0, 16), score: Number(all[id] && all[id].score) || 0, t: Number(all[id] && all[id].t) || 0 }))
-      .sort((a, b) => b.score - a.score || a.t - b.t);
+    const required = Number(need) || 0;
+    const everyone = Object.keys(all).map((id) => ({
+      id,
+      name: String((all[id] && all[id].name) || '?').slice(0, 16),
+      score: Number(all[id] && all[id].score) || 0,
+      chapters: Number(all[id] && all[id].chapters) || 0,
+      t: Number(all[id] && all[id].t) || 0,
+    }));
+    const mine = everyone.find((r) => r.id === me) || null;
+    const rows = everyone.filter((r) => r.chapters >= required).sort((a, b) => b.score - a.score || a.t - b.t);
     const idx = rows.findIndex((r) => r.id === me);
     return {
       top: rows.slice(0, limit === undefined ? 10 : limit),
       myRank: idx >= 0 ? idx + 1 : null,
-      myScore: idx >= 0 ? rows[idx].score : null,
+      myScore: mine ? mine.score : null,
+      myChapters: mine ? mine.chapters : 0,
       total: rows.length,
     };
   }

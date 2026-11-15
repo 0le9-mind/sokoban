@@ -467,6 +467,9 @@
 
   function chapterSize() { return (config && config.chapter_size) || 25; }
 
+  /** Скільки розділів у всій грі: стільки треба пройти, щоб потрапити в Зал слави. */
+  function totalChapters() { return Math.ceil(config.levels.length / chapterSize()); }
+
   /** Скільки розділів пройдено повністю (при заданій кількості пройдених рівнів). */
   function chaptersDone(solved) {
     const n = config.levels.length, size = chapterSize();
@@ -579,19 +582,19 @@
     const items = chapterItems(solutions).filter((it) => run.synced['c' + it.c] !== it.score);
     let res;
     if (items.length) {
-      res = await Cloud.submit(items);
+      res = await Cloud.submit(items, totalChapters());
       items.forEach((it) => { run.synced['c' + it.c] = it.score; });
       patchSave({ synced: run.synced });
     } else {
-      const top = await Cloud.fetchTop(0);
-      res = { score: top.myScore, rank: top.myRank, chapters: chaptersDone(solutions.length) };
+      const top = await Cloud.fetchTop(0, totalChapters());
+      res = { score: top.myScore || 0, rank: top.myRank, chapters: chaptersDone(solutions.length) };
     }
     return res;
   }
 
   function cloudSummary(res) {
-    const place = res.rank ? ` Місце в Залі слави: #${res.rank}.` : '';
-    return `☁ Збережено! Розділів: ${res.chapters}, очок: ${res.score}.${place}`;
+    if (res.rank) return `☁ Збережено! Ви в Залі слави: місце #${res.rank}, очок: ${res.score}.`;
+    return `☁ Прогрес збережено: розділів ${res.chapters} із ${totalChapters()}, очок: ${res.score}. У Зал слави потрапляють ті, хто пройде всі ${config.levels.length} рівнів.`;
   }
 
   /** Збереження в хмару з показом стану у вікні (el — рядок статусу) або в меню. */
@@ -693,10 +696,13 @@
   async function openCloudScores(list, status) {
     status.textContent = '☁ Завантажуємо Зал слави…';
     try {
-      const res = await Cloud.fetchTop(10);
+      const res = await Cloud.fetchTop(10, totalChapters());
       list.textContent = '';
-      if (!res.top.length) { status.textContent = 'Поки що нікого немає. Пройди розділ і стань першим!'; return; }
-      status.textContent = '';
+      const mineText = res.myRank ? '' : (res.myChapters
+        ? `Ваш прогрес: розділів ${res.myChapters} із ${totalChapters()}. У Зал слави потрапляють ті, хто пройде всі ${config.levels.length} рівнів.`
+        : `У Зал слави потрапляють ті, хто пройде всі ${config.levels.length} рівнів.`);
+      if (!res.top.length) { status.textContent = 'Поки що ніхто не пройшов усі рівні. Стань першим! ' + mineText; return; }
+      status.textContent = mineText;
       const me = Cloud.playerId();
       res.top.forEach((p, i) => list.appendChild(scoreRow(i + 1, p.name, p.score, p.id === me)));
       if (res.myRank && res.myRank > res.top.length) {
@@ -891,7 +897,7 @@
     bindControls();
 
     try {
-      const res = await fetch('./levels.json?v=8', { cache: 'no-store' });
+      const res = await fetch('./levels.json?v=9', { cache: 'no-store' });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       config = await res.json();
       const s = config.scoring;
